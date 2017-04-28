@@ -2,6 +2,23 @@
 
 CEPH_MOUNT="/galaxy_base"
 SSH_DIR="/home/docker/.ssh"
+DOCKER_ID="1000"
+GALAXY_ID="1001"
+
+# Docker user and group
+if ! groups "docker" >/dev/null 2>&1; then
+    groupadd docker -g "$DOCKER_ID"
+fi
+if ! id "docker" >/dev/null 2>&1; then
+    useradd docker -u "$DOCKER_ID" -g docker
+fi
+# Galaxy user and group
+if ! groups "galaxy" >/dev/null 2>&1; then
+    groupadd galaxy -g "$GALAXY_ID"
+fi
+if ! id "galaxy" >/dev/null 2>&1; then
+    useradd galaxy -u "$GALAXY_ID" -G docker -g galaxy
+fi
 
 # Update the system and install Ceph repos
 yum update -y
@@ -25,7 +42,8 @@ mount "$CEPH_MOUNT"
 yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
 yum makecache fast
 yum install docker-ce -y
-useradd docker -g docker
+
+# Enable Docker service
 systemctl start docker
 systemctl enable docker
 
