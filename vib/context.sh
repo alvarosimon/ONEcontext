@@ -1,6 +1,7 @@
 #!/bin/bash
 
 CEPH_MOUNT="/galaxy_base"
+CEPH_NAME="vib"
 SSH_DIR="/home/docker/.ssh"
 DOCKER_ID="1000"
 GALAXY_ID="1001"
@@ -31,12 +32,15 @@ hostnamectl set-hostname --static $(/sbin/ip -4 -o addr show to 10.145.0.0/16 | 
 
 # mount Ceph
 if [ ! -d "$CEPH_MOUNT" ]; then
-    mkdir "$CEPH_MOUNT"
+    mkdir -p "$CEPH_MOUNT"
 fi
-if ! grep -Fq "$CEPH_MOUNT" /etc/fstab; then
-    echo "mds11.grimer.stor,mds12.grimer.stor,mds13.grimer.stor:/external/vib $CEPH_MOUNT ceph secretfile=/mnt/vib.secret,name=vib,noatime 0 0" >> /etc/fstab
-fi
-mount "$CEPH_MOUNT"
+
+unit=ceph-vib.service
+sed "s#/CEPHMOUNT#$CEPH_MOUNT#g;s/CEPHNAME/$CEPH_NAME/g" /mnt/$unit > /etc/systemd/system/$unit
+systemctl daemon-reload
+systemctl enable $unit
+systemctl start $unit
+
 
 # Install and enable Docker service
 yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
