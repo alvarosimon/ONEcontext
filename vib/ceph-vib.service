@@ -1,0 +1,18 @@
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+ExecStartPre=/bin/mkdir -p /onecdrom
+ExecStartPre=/bin/mount /dev/cdrom /onecdrom
+ExecStart=/bin/mount -t ceph mds11.grimer.stor,mds12.grimer.stor,mds13.grimer.stor:/external/vib /CEPHMOUNT -o name=CEPHNAME,secretfile=/onecdrom/CEPHNAME.secret,noatime
+ExecStartPost=/bin/umount /onecdrom
+ExecStop=/bin/umount /CEPHMOUNT
+Type=oneshot
+RemainAfterExit=yes
+
+[Unit]
+After=network.target vmcontext.service
+Before=galaxy.service docker.service
+ConditionPathIsDirectory=/CEPHMOUNT
+Description=Cephfs VIB mount
+Requires=network.target vmcontext.service
