@@ -37,6 +37,10 @@ fi
 
 unit=ceph-vib.service
 sed "s#/CEPHMOUNT#$CEPH_MOUNT#g;s/CEPHNAME/$CEPH_NAME/g" /mnt/$unit > /etc/systemd/system/$unit
+
+# for start during context only; not as standalone unit in eg galaxy VM
+sed -i 's/vmcontext.service//g' /etc/systemd/system/$unit
+
 systemctl daemon-reload
 systemctl enable $unit
 systemctl start $unit

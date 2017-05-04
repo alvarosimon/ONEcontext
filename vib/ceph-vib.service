@@ -15,5 +15,4 @@ After=network.target vmcontext.service
 Before=galaxy.service docker.service
 ConditionPathIsDirectory=/CEPHMOUNT
 Description=Cephfs VIB mount
-Requires=network.target
-Wants=vmcontext.service
+Requires=network.target vmcontext.service
