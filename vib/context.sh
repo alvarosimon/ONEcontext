@@ -74,6 +74,8 @@ if [ "$ROLE_NAME" == "Master" ]; then
     docker node update --availability drain `hostname -f`
 fi
 if [ "$ROLE_NAME" == "Worker" ]; then
+    echo '{"debug":true,"storage-driver":"overlay2","storage-opts":["overlay2.override_kernel_check=true"]}' > /etc/docker/daemon.json
+    systemctl restart docker
     SWARM_TOKEN=$(su - docker -c "ssh -q -o 'UserKnownHostsFile=/dev/null' -o 'StrictHostKeyChecking no' $MASTER_IP")
     docker swarm join --token "$SWARM_TOKEN" "$MASTER_IP":2377
 fi
