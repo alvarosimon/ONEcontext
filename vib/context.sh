@@ -27,6 +27,7 @@ yum install https://download.ceph.com/rpm-jewel/el7/noarch/ceph-release-1-1.el7.
 yum install yum-utils ceph-common -y
 
 # Set hostname
+yum install bind-utils -y
 hostnamectl set-hostname --static $(/sbin/ip -4 -o addr show to 10.145.0.0/16 | /bin/sed "s#.*\(10\.[0-9]\+\.[0-9]\+\.[0-9]\+\)/[0-9].*#\1#" \
 | /usr/bin/head -1 | xargs host | sed "s/.* //;s/\.$//")
 
