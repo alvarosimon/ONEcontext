@@ -4,14 +4,6 @@
 # Not licensed
 # authors: alvaro.simongarcia@ugent.be, stijn.deweirdt@ugent.be
 
-ONEDIR=/var/tmp/vibcontext
-mkdir -p $ONEDIR
-chmod 700 $ONEDIR
-# AII style logging
-exec >>$ONEDIR/log 2>&1
-
-set -x
-
 DOCKER_SSH_DIR="/home/docker/.ssh"
 DOCKER_ID="1000"
 
@@ -34,13 +26,36 @@ FORCE_NO_CONTEXT_DEP=1
 
 SWARM=legacy
 
+ONEDIR=/var/tmp/vibcontext
+CDROM=$ONEDIR/cdrom
+
+mkdir -p $CDROM
+chmod 750 $ONEDIR
+chgrp "$DOCKER_ID" "$ONEDIR"
+
+# AII style logging
+exec >>$ONEDIR/log 2>&1
+
+set -x
+
+
+function check_cdrom () {
+    read -t1 < <(stat -t "$CDROM" 2>&-)
+    if [[ "$REPLY" =~ "iso9660" ]] ; then
+          echo "VM CDROM is mounted in $CDROM"
+    else
+          echo "VM CDROM is not mounted. Mounting in $CDROM"
+          mount /dev/cdrom "$CDROM"
+    fi
+}
+
 function latest_kernel () {
     local path
     yum -y install http://elrepo.org/linux/kernel/el7/x86_64/RPMS/elrepo-release-7.0-2.el7.elrepo.noarch.rpm
     yum -y --enablerepo=elrepo-kernel install kernel-ml grubby
     # get latest vmlinuz image
     path=$(ls -lrt /boot/vmlinuz-*|tail -1)
-    grubby --set-default=$path
+    grubby --set-default="$path"
     grubby --default-kernel
 }
 
@@ -55,7 +70,7 @@ function add_docker_user () {
     fi
     # Include SSH keys
     if [ ! -d "$DOCKER_SSH_DIR" ]; then
-        su - docker -c "cd /home/docker && tar xvzf /mnt/pub_keys.tar.gz"
+        su - docker -c "cd /home/docker && tar xvzf $CDROM/pub_keys.tar.gz"
     fi
 }
 
@@ -96,9 +111,9 @@ function enable_unit () {
     local unit
     unit="$1"
     systemctl daemon-reload
-    systemctl enable $unit
+    systemctl enable "$unit"
     if [ $NOW -eq 1 ]; then
-        systemctl start $unit
+        systemctl start "$unit"
     fi
 }
 
@@ -112,7 +127,7 @@ function setup_ceph () {
     fi
 
     unit=ceph-vib.service
-    sed "s#/CEPHMOUNT#$CEPH_MOUNT#g;s/CEPHNAME/$CEPH_NAME/g" /mnt/$unit > /etc/systemd/system/$unit
+    sed "s#/CEPHMOUNT#$CEPH_MOUNT#g;s/CEPHNAME/$CEPH_NAME/g" $CDROM/$unit > /etc/systemd/system/$unit
 
     if [ ! -z "$FORCE_NO_CONTEXT_DEP" ] || [ $NOW -eq 1 ]; then
         # for start during context only; not as standalone unit in eg galaxy VM
@@ -144,7 +159,7 @@ function add_docker () {
 
 function one_env () {
     # Get OpenNebula VM context variables
-    source /tmp/one_env
+    source "$CDROM/context.sh"
 }
 
 function docker_config () {
@@ -156,7 +171,7 @@ function docker_config () {
 
 function notify_onegate () {
     # Send READY message to ONE gate
-    curl -X "PUT" "$ONEGATE_ENDPOINT/vm" --header "X-ONEGATE-TOKEN: $(cat /mnt/token.txt)" --header "X-ONEGATE-VMID: $VMID" -d "READY = YES"
+    curl -X "PUT" "$ONEGATE_ENDPOINT/vm" --header "X-ONEGATE-TOKEN: $(cat $CDROM/token.txt)" --header "X-ONEGATE-VMID: $VMID" -d "READY = YES"
 }
 
 function setup_swarmkit () {
@@ -190,7 +205,7 @@ function get_legacy_swarm () {
     curl -L -o $fn.tgz https://github.com/docker/swarm/releases/download/v$version/swarm-$version-linux-x86_64.tgz
 
     # Unpack and install
-    cd $ONEDIR
+    cd "$ONEDIR"
     tar xzf $fn.tgz
     mv $fn $exe
     chmod +x $exe
@@ -271,10 +286,11 @@ function setup_worker () {
 }
 
 function set_ok () {
-    date > $OKFN
+    date > "$OKFN"
 }
 
-if [ ! -f $OKFN ]; then
+if [ ! -f "$OKFN" ]; then
+    check_cdrom
     add_galaxy_user
     system_update
     set_hostname
@@ -302,3 +318,5 @@ if [ ! -f $OKFN ]; then
 else
     notify_onegate
 fi
+
+umount "$CDROM"
