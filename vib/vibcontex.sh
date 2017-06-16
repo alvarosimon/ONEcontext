@@ -5,7 +5,9 @@
 # authors: alvaro.simongarcia@ugent.be, stijn.deweirdt@ugent.be
 
 DOCKER_SSH_DIR="/home/docker/.ssh"
+DOCKER_TOKEN_FILE="/home/docker/token"
 DOCKER_ID="1000"
+
 
 GALAXY_ID="1001"
 
@@ -181,6 +183,9 @@ function setup_swarmkit () {
     docker swarm init --advertise-addr "$MASTER_IP"
     # Drain Master from workers list
     docker node update --availability drain $(hostname -f)
+
+    # Get swarm token and include it in a file
+    create_swarm_token swarmkit
 }
 
 function join_swarmkit () {
@@ -188,6 +193,8 @@ function join_swarmkit () {
     docker_config
 
     # The authorized keys only allows getting the swarm token
+    # ssh only allows to cat /home/docker/token file
+    # this is set from master /home/docker/.ssh/authorized_keys file
     SWARM_TOKEN=$(su - docker -c "ssh -q -o 'UserKnownHostsFile=/dev/null' -o 'StrictHostKeyChecking no' $MASTER_IP")
     docker swarm join --token "$SWARM_TOKEN" "$MASTER_IP":2377
 }
@@ -215,9 +222,11 @@ function get_legacy_swarm () {
         manage)
             # create the swarm
             swarm create > /root/.swarmid
+            SWARM_TOKEN=$(/usr/bin/cat "$DOCKER_TOKEN_FILE")
             cmd="manage -H $MASTER_IP:$REMOTE_API_PORT"
             ;;
         join)
+            SWARM_TOKEN=$(su - docker -c "ssh -q -o 'UserKnownHostsFile=/dev/null' -o 'StrictHostKeyChecking no' $MASTER_IP")
             cmd="join --advertise=$(hostname -f):$DOCKER_PORT"
             ;;
         *)
@@ -231,7 +240,7 @@ function get_legacy_swarm () {
 WantedBy=multi-user.target
 
 [Service]
-ExecStart=$exe $cmd etcd://$MASTER_IP:2379
+ExecStart=$exe $cmd etcd://$MASTER_IP:2379/$SWARM_TOKEN
 Type=simple
 
 [Unit]
@@ -250,16 +259,31 @@ EOF
 
 }
 
-function setup_ectd () {
+function create_swarm_token () {
+    if [ "$1" == "legacy" ]; then
+        # Generate a random id and put it in the token file
+        token=$(< /dev/urandom tr -dc A-Z-a-z-0-9 | head -c 32)
+    else
+        # Get the swarm token and put it in the token file
+        token=$(docker swarm join-token --quiet worker)
+    fi
+    echo "$token" > "$DOCKER_TOKEN_FILE"
+    chmod 640 "$DOCKER_TOKEN_FILE"
+    chgrp "$DOCKER_ID" "$DOCKER_TOKEN_FILE"
+}
+
+function setup_etcd () {
     yum install etcd3 -y
     sed -i "s#ETCD_ADVERTISE_CLIENT_URLS=.*#ETCD_ADVERTISE_CLIENT_URLS='http://$MASTER_IP:2379'#" /etc/etcd/etcd.conf
     sed -i "s#ETCD_LISTEN_CLIENT_URLS=.*#ETCD_LISTEN_CLIENT_URLS='http://$MASTER_IP:2379'#" /etc/etcd/etcd.conf
+    sed -i "s#ETCD_INITIAL_CLUSTER_TOKEN=.*#ETCD_INITIAL_CLUSTER_TOKEN='$token'#" /etc/etcd/etcd.conf
 
     enable_unit etcd.service
 }
 
 function setup_legacy_swarm () {
     # No docker config required
+    create_swarm_token legacy
     setup_etcd
     get_legacy_swarm manage
 }
