@@ -4,10 +4,12 @@
 # Not licensed
 # authors: alvaro.simongarcia@ugent.be, stijn.deweirdt@ugent.be
 
+ONEDIR=/var/tmp/vibcontext
+
 DOCKER_SSH_DIR="/home/docker/.ssh"
 DOCKER_TOKEN_FILE="/home/docker/token"
 DOCKER_ID="1000"
-
+DOCKER_PORT=2375
 
 GALAXY_ID="1001"
 
@@ -16,8 +18,7 @@ CEPH_NAME="vib"
 
 IP_RANGE="10.145.0.0/16"
 
-REMOTE_API_PORT=4000
-DOCKER_PORT=2375
+REMOTE_API_PORT=3000
 
 OKFN=$ONEDIR/ok
 # 0=reboot
@@ -28,7 +29,6 @@ FORCE_NO_CONTEXT_DEP=1
 
 SWARM=legacy
 
-ONEDIR=/var/tmp/vibcontext
 CDROM=$ONEDIR/cdrom
 
 mkdir -p $CDROM
@@ -167,11 +167,12 @@ function one_env () {
 function docker_config () {
     add_docker
     # Use local socket and VIB name; use overlay2
-    echo '{"debug":true,"hosts":["tcp://'$(hostname -f)':'"$DOCKER_PORT"'","unix:///var/run/docker.sock"],"storage-driver":"overlay2","storage-opts":["overlay2.override_kernel_check=true"]}' > /etc/docker/daemon.json
+    echo '{"debug":true,"bip":"10.10.0.1/16","hosts":["tcp://'$(hostname -f)':'"$DOCKER_PORT"'","unix:///var/run/docker.sock"],"storage-driver":"overlay2","storage-opts":["overlay2.override_kernel_check=true"]}' > /etc/docker/daemon.json
     systemctl restart docker
 }
 
 function notify_onegate () {
+    check_cdrom
     # Send READY message to ONE gate
     curl -X "PUT" "$ONEGATE_ENDPOINT/vm" --header "X-ONEGATE-TOKEN: $(cat $CDROM/token.txt)" --header "X-ONEGATE-VMID: $VMID" -d "READY = YES"
 }
